@@ -14,15 +14,18 @@ public partial class CarListingViewModel : BaseViewModel
 
     private const string editButtonText = "Update Car";
     private const string createButtonText = "Add Car";
+    private readonly CarApiService _carApiService;
+    NetworkAccess accessType = Connectivity.Current.NetworkAccess;
+    string message = String.Empty;
     public ObservableCollection<Car> Cars { get; private set; } = new();
 
     // public CarListingViewModel(CarService carService)
-    public CarListingViewModel()
+    public CarListingViewModel(CarApiService carApiService)
     {
         Title = "Car Listing";
-        // this.carService = carService;
+        _carApiService = carApiService;
         AddEditButtonText = createButtonText;
-        GetCarList().Wait();
+        // GetCarList().Wait();
     }
     
     [ObservableProperty]
@@ -43,8 +46,16 @@ public partial class CarListingViewModel : BaseViewModel
         {
             IsLoading = true;
             if (Cars.Any()) Cars.Clear();
-
-            var cars = App.CarService.GetCars(); // changed from carService to App.CarService
+            // var cars = App.CarService.GetCars(); // changed from carService to App.CarService
+            var cars = new List<Car>();
+            if (accessType == NetworkAccess.Internet)
+            {
+                cars = await _carApiService.GetCars();
+            }
+            else
+            {
+                cars = App.CarService.GetCars();
+            }
             foreach (var car in cars)
             {
                 Cars.Add(car);
@@ -53,7 +64,7 @@ public partial class CarListingViewModel : BaseViewModel
         catch (Exception e)
         {
             Debug.WriteLine($"Unable to get cars: {e.Message}");
-            await Shell.Current.DisplayAlert("Error", "Failed to get list of cars", "OK");
+            await ShowAlert("Failed to retrive list of cars");
         }
         finally
         {
@@ -74,7 +85,7 @@ public partial class CarListingViewModel : BaseViewModel
     {
         if (string.IsNullOrEmpty(Make) || string.IsNullOrEmpty(Model) || string.IsNullOrEmpty(Year) || string.IsNullOrEmpty(Vin))
         {
-            await Shell.Current.DisplayAlert("Invalid Data", "Please insert valid data", "Ok");
+            await ShowAlert("Please provide valid data");
             return;
         }
 
@@ -88,16 +99,31 @@ public partial class CarListingViewModel : BaseViewModel
 
         if (CarId != 0)
         {
-            car.Id = CarId;
-            App.CarService.UpdateCar(car);
-            await Shell.Current.DisplayAlert("Info", App.CarService.StatusMessage, "Ok");
+            if (accessType == NetworkAccess.Internet)
+            {
+                await _carApiService.UpdateCar(CarId, car);
+                message = _carApiService.StatusMessage;
+            }
+            else
+            {
+                App.CarService.UpdateCar(car);
+                message = App.CarService.StatusMessage;
+            }
         }
         else
         {
-            App.CarService.AddCar(car);
-            await Shell.Current.DisplayAlert("Info", App.CarService.StatusMessage, "Ok");
+            if (accessType == NetworkAccess.Internet)
+            {
+                await _carApiService.AddCar(car);
+                message = _carApiService.StatusMessage;
+            }
+            else
+            {
+                App.CarService.AddCar(car);
+                message = App.CarService.StatusMessage;
+            }
         }
-
+        await ShowAlert(message);
         await GetCarList();
         await ClearForm();
     }
@@ -107,16 +133,23 @@ public partial class CarListingViewModel : BaseViewModel
     {
         if (id == 0)
         {
-            await Shell.Current.DisplayAlert("Invalid Record", "Please try again", "Ok");
+            await ShowAlert("Invalid Record, please try again");
             return;
         }
-        var result = App.CarService.DeleteCar(id);
-        if (result == 0) await Shell.Current.DisplayAlert("Failed", "Please insert valid data", "Ok");
+
+        if (accessType == NetworkAccess.Internet)
+        {
+            await _carApiService.DeleteCar(id);
+            message = _carApiService.StatusMessage;
+        }
         else
         {
-            await Shell.Current.DisplayAlert("Deletion Successful", "Record Removed Successfully", "Ok");
-            await GetCarList();
+            App.CarService.DeleteCar(id);
+            message = App.CarService.StatusMessage;
         }
+
+        await ShowAlert("Deletion Successful, record was removed successfully");
+        await GetCarList();
     }
 
     [RelayCommand]
@@ -131,7 +164,15 @@ public partial class CarListingViewModel : BaseViewModel
     {
         AddEditButtonText = editButtonText;
         CarId = id;
-        var car = App.CarService.GetCar(id);
+        Car car;
+        if (accessType == NetworkAccess.Internet)
+        {
+            car = await _carApiService.GetCar(CarId);
+        }
+        else
+        {
+            car = App.CarService.GetCar(CarId);
+        }
         Make = car.Make;
         Model = car.Model;
         Year = car.Year;
@@ -148,5 +189,10 @@ public partial class CarListingViewModel : BaseViewModel
         Year = string.Empty;
         Vin = string.Empty;
     
+    }
+
+    private async Task ShowAlert(string message)
+    {
+        await Shell.Current.DisplayAlert("Info", message, "Ok");
     }
 }
