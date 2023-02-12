@@ -1,4 +1,5 @@
-﻿using CarListingApp.Services;
+﻿using System.Diagnostics;
+using CarListingApp.Services;
 using CarListingApp.ViewModels;
 using CarListingApp.Views;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,7 @@ public static class MauiProgram
 
         string dbPath = Path.Combine(FileSystem.AppDataDirectory, "cars.db3");
         builder.Services.AddSingleton<CarService>(s => ActivatorUtilities.CreateInstance<CarService>(s, dbPath));
+        builder.Services.AddTransient<CarApiService>();
         
         builder.Services.AddSingleton<CarListingViewModel>();
         builder.Services.AddTransient<CarDetailsViewModel>();
